@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { manipulate } from "./colorManipulation";
 import JSZip from "jszip";
+import { Jimp } from "jimp";
 
 export function ColorReplacer() {
     const [zip, setZip] = useState(null);
     const [result, setResult] = useState(null);
+    const [blob, setBlob] = useState(null);
     const [exampleImage, setExampleImage] = useState(null);
+    const [output, setOutput] = useState(null);
     const [loading, setLoading] = useState(false);
 
     const FILEINPUT_CLASSNAME = "block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
@@ -21,6 +24,7 @@ export function ColorReplacer() {
                                 if (zipObject.dir === false) {
                                     zipObject.async('blob')
                                         .then(blob => {
+                                            setBlob(blob);
                                             setExampleImage(URL.createObjectURL(blob));
                                         })
                                 }
@@ -53,8 +57,26 @@ export function ColorReplacer() {
         })
 
     }
+    function onFilterChange(filters) {
+        console.log("onfilterchange", filters)
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const data = e.target?.result;
 
+            if (!data || !(data instanceof ArrayBuffer)) {
+                return;
+            }
 
+            // Manipulate images uploaded directly from the website.
+            const image = await Jimp.fromBuffer(data);
+            filters.forEach(f => {
+                f.apply(null, [image]);
+            })
+
+            setOutput(await image.getBase64("image/png"));
+        };
+        reader.readAsArrayBuffer(blob);
+    }
 
     return (
         <div className="container mx-auto">
@@ -64,18 +86,43 @@ export function ColorReplacer() {
                     name="file" className={FILEINPUT_CLASSNAME} />
                 <button className="my-5 bg-yellow-200 hover:bg-yellow-300 px-4 py-2 rounded-lg " >Поехали</button>
             </form>
-            {exampleImage && <ExampleImage src={exampleImage} />}
+            {exampleImage && <Controls onFilterChange={onFilterChange} />}
+            {exampleImage && <ExampleImage src={exampleImage} output={output} />}
             {loading && <Spinner />}
             {result != null && <DownloadRow result={result} />}
         </div>
     )
 }
 
-function ExampleImage({ src }) {
+function Controls({ onFilterChange }) {
+    function grayscaleToggle(e) {
+        console.log("grayscale", e)
+        const filters = [];
+        if (e.target.checked) {
+            let grayscale = function (image) {
+                image.greyscale();
+            }
+            filters.push(grayscale)
+        }
+        onFilterChange(filters)
+    }
     return (
-        <img src={src} />
+        <>
+            <input type="checkbox" id="grayscale" name="grayscale" onChange={grayscaleToggle} />
+            <label htmlFor="grayscale">Grayscale</label>
+        </>
     )
 }
+
+function ExampleImage({ src, output }) {
+    return (
+        <div>
+            <img width="50%" src={src} />
+            {output && <img width="50%" src={output} />}
+        </div>
+    )
+}
+
 
 function Spinner() {
     return (
