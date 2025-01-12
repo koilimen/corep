@@ -2,6 +2,7 @@ import { useState } from "react";
 import { manipulate } from "./colorManipulation";
 import JSZip from "jszip";
 import { Jimp } from "jimp";
+import * as JimpFunctions from "./JimpFunctions";
 
 export function ColorReplacer() {
     const [zip, setZip] = useState(null);
@@ -58,24 +59,15 @@ export function ColorReplacer() {
 
     }
     function onFilterChange(filters) {
-        console.log("onfilterchange", filters)
-        const reader = new FileReader();
-        reader.onload = async (e) => {
-            const data = e.target?.result;
-
-            if (!data || !(data instanceof ArrayBuffer)) {
-                return;
-            }
-
-            // Manipulate images uploaded directly from the website.
-            const image = await Jimp.fromBuffer(data);
-            filters.forEach(f => {
-                f.apply(null, [image]);
-            })
-
-            setOutput(await image.getBase64("image/png"));
-        };
-        reader.readAsArrayBuffer(blob);
+        const worker = new Worker(new URL("./manipulationWorker", import.meta.url));
+        worker.postMessage({
+            blob: blob,
+            filters: filters
+        })
+        worker.onmessage = function (e) {
+            setOutput(e.data)
+        }
+        console.log("on filter change")
     }
 
     return (
@@ -95,30 +87,61 @@ export function ColorReplacer() {
 }
 
 function Controls({ onFilterChange }) {
-    function grayscaleToggle(e) {
-        console.log("grayscale", e)
-        const filters = [];
+    const [filters, setFilters] = useState([]);
+    const [blurRadius, setBlurRadius] = useState(3);
+
+    function commonToggle(e, filterData) {
+        let newFilters;
         if (e.target.checked) {
-            let grayscale = function (image) {
-                image.greyscale();
-            }
-            filters.push(grayscale)
+            newFilters = filters.slice();
+            newFilters.push(filterData)
+        } else {
+            newFilters = filters.filter(f => f.name !== filterData.name)
         }
-        onFilterChange(filters)
+        setFilters(newFilters)
+        onFilterChange(newFilters)
+    }
+    function grayscaleToggle(e) {
+        commonToggle(e, { name: JimpFunctions.Grayscale.name })
+    }
+    function handleBlur(e) {
+        commonToggle(e, { name: JimpFunctions.Blur.name, args: { radius: blurRadius } })
+    }
+    function handleBlurRadius(e) {
+        const newRadius = parseInt(e.target.value);
+        setBlurRadius(newRadius);
+
+        const newFilters = filters.filter(f => f.name !== JimpFunctions.Blur.name);
+        if (newRadius > 0) newFilters.push({ name: JimpFunctions.Blur.name, args: { radius: newRadius } })
+        setFilters(newFilters)
+        onFilterChange(newFilters);
     }
     return (
         <>
-            <input type="checkbox" id="grayscale" name="grayscale" onChange={grayscaleToggle} />
-            <label htmlFor="grayscale">Grayscale</label>
+            <div>
+                <input type="checkbox" id="grayscale" name="grayscale" onChange={grayscaleToggle} />
+                <label htmlFor="grayscale">Сделать серым</label>
+            </div>
+            <div>
+                <input type="checkbox" id="blur" name="blur" onChange={handleBlur} />
+                <label htmlFor="blur">Размытие</label>
+                <input type="number" value={blurRadius} id="blurRadius" onChange={handleBlurRadius}></input>
+            </div>
         </>
     )
 }
 
 function ExampleImage({ src, output }) {
     return (
-        <div>
-            <img width="50%" src={src} />
-            {output && <img width="50%" src={output} />}
+        <div className="columns-2">
+            <div className="w-full">
+                <span>До</span>
+                <img className="w-full" src={src} />
+            </div>
+            <div className="w-full">
+                <span>После</span>
+                {output && <img className="w-full" src={output} />}
+            </div>
         </div>
     )
 }

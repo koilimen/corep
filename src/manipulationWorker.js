@@ -1,25 +1,21 @@
-import { manipulate } from "./colorManipulation";
-const worker = () => {
-    onmessage = (e) => {
-        const blobs = e.data;
-        const promises = []
-        blobs.forEach(blobData => {
-            const relPath = blobData.name;
-            const blob = blobData.blob;
-            const type = relPath.substring(relPath.lastIndexOf('.') + 1);
-            promises.push(manipulate(blob, type, (base64ConvertedData) => {
-                postMessage([relPath, base64ConvertedData]);
-            }));
-        });
+import { Jimp } from "jimp";
+import * as JimpFunctions from "./JimpFunctions"; 
 
-        Promise.all(promises).then(() => {
-            postMessage(null);
+onmessage = function (workerMessage) {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const data = e.target?.result;
+        if (!data || !(data instanceof ArrayBuffer)) {
+            return;
+        }
+        // Manipulate images uploaded directly from the website.
+        const image = await Jimp.fromBuffer(data);
+        workerMessage.data.filters.forEach(f => {
+            const Fun = JimpFunctions.functionsHash[f.name];
+            const funObj = f.args != null ? new Fun(f.args) : new Fun();
+            funObj.run(image);
         })
-    }
+        this.postMessage(await image.getBase64("image/png"));
+    };
+    reader.readAsArrayBuffer(workerMessage.data.blob);
 }
-
-let code = worker.toString()
-code = code.substring(code.indexOf("{") + 1, code.lastIndexOf("}"))
-const blob = new Blob([code], { type: 'application/javascript' })
-const workerScript = URL.createObjectURL(blob)
-export default workerScript;
