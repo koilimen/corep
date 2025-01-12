@@ -13,26 +13,22 @@ export function ColorReplacer() {
     const [loading, setLoading] = useState(false);
 
     const FILEINPUT_CLASSNAME = "block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
-    function onChange(e) {
-        e.target.files[0].arrayBuffer()
-            .then(data => {
-                const jsZip = new JSZip()
-                jsZip.loadAsync(data)
-                    .then((loadedZip) => {
-                        setZip(loadedZip);
-                        loadedZip.forEach((path, zipObject) => {
-                            if (exampleImage == null) {
-                                if (zipObject.dir === false) {
-                                    zipObject.async('blob')
-                                        .then(blob => {
-                                            setBlob(blob);
-                                            setExampleImage(URL.createObjectURL(blob));
-                                        })
-                                }
-                            }
-                        });
-                    })
-            })
+    async function onChange(e) {
+        const data = await e.target.files[0].arrayBuffer();
+        const jsZip = new JSZip()
+        const loadedZip = await jsZip.loadAsync(data)
+        setZip(loadedZip);
+        loadedZip.forEach((path, zipObject) => {
+            if (exampleImage == null) {
+                if (zipObject.dir === false) {
+                    zipObject.async('blob')
+                        .then(blob => {
+                            setBlob(blob);
+                            setExampleImage(URL.createObjectURL(blob));
+                        })
+                }
+            }
+        });
     }
     function convert(e) {
         e.preventDefault();
