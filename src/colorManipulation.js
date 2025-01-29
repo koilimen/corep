@@ -11,7 +11,8 @@ export async function manipulate(data, type, success) {
                     { apply: "hue", params: [-80] },
                     { apply: "desaturate", params: [50] },
                 ]);
-                success(image.getBuffer("image/"+type));
+                if (type == 'jpg') type = 'jpeg';
+                success(image.getBuffer("image/" + type));
             });
     };
     fileReader.readAsArrayBuffer(data);

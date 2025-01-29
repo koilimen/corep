@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { manipulate } from "./colorManipulation";
 import JSZip from "jszip";
-import { Jimp } from "jimp";
 import * as JimpFunctions from "./JimpFunctions";
+import Button from "@mui/material/Button";
 
 export function ColorReplacer() {
     const [zip, setZip] = useState(null);
@@ -11,6 +11,7 @@ export function ColorReplacer() {
     const [exampleImage, setExampleImage] = useState(null);
     const [output, setOutput] = useState(null);
     const [loading, setLoading] = useState(false);
+    const [filters, setFilters] = useState([]);
 
     const FILEINPUT_CLASSNAME = "block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-violet-50 file:text-violet-700 hover:file:bg-violet-100"
     async function onChange(e) {
@@ -35,22 +36,35 @@ export function ColorReplacer() {
         const newZip = new JSZip();
         setLoading(true)
         const promises = []
+        const blobs = []
         zip.forEach((relPath, zipObject) => {
-            const type = relPath.substring(relPath.lastIndexOf('.') + 1);
             const prom = zipObject.async('blob');
             promises.push(prom);
             prom.then(blob => {
-                manipulate(blob, type, (base64ConvertedData) => {
-                    newZip.file(relPath, base64ConvertedData);
-                })
+                // manipulate(blob, type, (base64ConvertedData) => {
+                //     newZip.file(relPath, base64ConvertedData);
+                // })
+                blobs.push({ blob: blob, relPath: relPath });
             })
         });
 
         Promise.all(promises).then(() => {
-            newZip.generateAsync({ type: 'base64' })
-                .then((data) => setResult("data:image/png;base64," + data));
-            setLoading(false);
-
+            const worker = new Worker(new URL("./batchManipulationWorker", import.meta.url));
+            worker.postMessage({
+                blobs: blobs,
+                filters: filters
+            })
+            worker.onmessage = function (e) {
+                console.log(e.data ? e.data?.relPath : 'null');
+                if (e.data != null) {
+                    newZip.file(e.data.relPath, e.data.blob);
+                } else {
+                   
+                    newZip.generateAsync({ type: 'base64' })
+                        .then((data) => setResult("data:application/zip;base64," + data));
+                    setLoading(false);
+                }
+            }
         })
 
     }
@@ -63,18 +77,17 @@ export function ColorReplacer() {
         worker.onmessage = function (e) {
             setOutput(e.data)
         }
-        console.log("on filter change")
     }
 
     return (
         <div className="container mx-auto">
             <h1 className="my-3">Замена Цвета</h1>
-            <form onSubmit={convert}>
+            <form>
                 <input type="file" onChange={onChange}
                     name="file" className={FILEINPUT_CLASSNAME} />
-                <button className="my-5 bg-yellow-200 hover:bg-yellow-300 px-4 py-2 rounded-lg " >Поехали</button>
+                <Button onClick={convert} variant="contained" >Поехали</Button>
             </form>
-            {exampleImage && <Controls onFilterChange={onFilterChange} />}
+            {exampleImage && <Controls onFilterChange={onFilterChange} filters={filters} setFilters={setFilters} />}
             {exampleImage && <ExampleImage src={exampleImage} output={output} />}
             {loading && <Spinner />}
             {result != null && <DownloadRow result={result} />}
@@ -82,9 +95,9 @@ export function ColorReplacer() {
     )
 }
 
-function Controls({ onFilterChange }) {
-    const [filters, setFilters] = useState([]);
+function Controls({ onFilterChange, filters, setFilters }) {
     const [blurRadius, setBlurRadius] = useState(3);
+    const [contrastValue, setContrastValue] = useState(0);
 
     function commonToggle(e, filterData) {
         let newFilters;
@@ -100,9 +113,17 @@ function Controls({ onFilterChange }) {
     function grayscaleToggle(e) {
         commonToggle(e, { name: JimpFunctions.Grayscale.name })
     }
+    function handleInvert(e) {
+        commonToggle(e, { name: JimpFunctions.Invert.name })
+    }
     function handleBlur(e) {
         commonToggle(e, { name: JimpFunctions.Blur.name, args: { radius: blurRadius } })
+    } 
+    
+    function handleContrast(e) {
+        commonToggle(e, { name: JimpFunctions.Contrast.name, args: { value: contrastValue / 100.0 } })
     }
+    
     function handleBlurRadius(e) {
         const newRadius = parseInt(e.target.value);
         setBlurRadius(newRadius);
@@ -112,6 +133,18 @@ function Controls({ onFilterChange }) {
         setFilters(newFilters)
         onFilterChange(newFilters);
     }
+     
+
+    function handleContrastValue(e) {
+        const newValue = parseInt(e.target.value) ;
+        setContrastValue(newValue);
+
+        const newFilters = filters.filter(f => f.name !== JimpFunctions.Contrast.name);
+        newFilters.push({ name: JimpFunctions.Contrast.name, args: { value: newValue / 100.0 } })
+        setFilters(newFilters)
+        onFilterChange(newFilters);
+    }
+
     return (
         <>
             <div>
@@ -122,6 +155,15 @@ function Controls({ onFilterChange }) {
                 <input type="checkbox" id="blur" name="blur" onChange={handleBlur} />
                 <label htmlFor="blur">Размытие</label>
                 <input type="number" value={blurRadius} id="blurRadius" onChange={handleBlurRadius}></input>
+            </div>
+            <div>
+                <input type="checkbox" id="contrast" onChange={handleContrast} />
+                <label htmlFor="contrast">Контраст</label>
+                <input type="number" min="-100" max="100" value={contrastValue} id="blurRadius" onChange={handleContrastValue}></input>
+            </div>
+            <div>
+                <input type="checkbox" id="invert" onChange={handleInvert} />
+                <label htmlFor="invert">Инвертировать цвета</label>
             </div>
         </>
     )

@@ -11,7 +11,7 @@ onmessage = function (workerMessage) {
         // Manipulate images uploaded directly from the website.
         const image = await Jimp.fromBuffer(data);
         workerMessage.data.filters.forEach(f => {
-            const Fun = JimpFunctions.functionsHash[f.name];
+            const Fun = JimpFunctions.FUNCTIONS_HASH[f.name];
             const funObj = f.args != null ? new Fun(f.args) : new Fun();
             funObj.run(image);
         })

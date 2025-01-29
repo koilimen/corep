@@ -11,7 +11,22 @@ export function Blur(args) {
     }
 }
 
-export const functionsHash = {
+export function Contrast(args) {
+    this.value = args.value;
+    this.run = (image) => {
+        image.contrast(this.value);
+    }
+}
+
+export function Invert() {
+    this.run = (image) => {
+        image.invert();
+    }
+}
+
+export const FUNCTIONS_HASH = {
     "Grayscale": Grayscale,
-    "Blur": Blur
+    "Blur": Blur,
+    "Contrast": Contrast,
+    "Invert": Invert,
 }
